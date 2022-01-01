@@ -1,0 +1,137 @@
+//=========================================================================================================================
+// Optional
+//=========================================================================================================================
+HEADER
+{
+	CompileTargets = ( IS_SM_50 && ( PC || VULKAN ) );
+	Description = "Toon Shader";
+	Version = 1;
+}
+
+//=========================================================================================================================
+// Optional
+//=========================================================================================================================
+MODES
+{
+	VrForward();													// Indicates this shader will be used for main rendering
+    Depth( "vr_depth_only.vfx" ); 									// Shader that will be used for shadowing and depth prepass
+    ToolsVis( S_MODE_TOOLS_VIS ); 									// Ability to see in the editor
+    ToolsWireframe( "vr_tools_wireframe.vfx" ); 					// Allows for mat_wireframe to work
+	ToolsShadingComplexity( "vr_tools_shading_complexity.vfx" ); 	// Shows how expensive drawing is in debug view
+}
+
+//=========================================================================================================================
+// Optional
+//=========================================================================================================================
+FEATURES
+{
+    #include "common/features.hlsl"
+}
+
+//=========================================================================================================================
+COMMON
+{
+	#include "common/shared.hlsl"
+
+	struct ToonShadedMaterial
+	{
+  		// Color and Normal Maps
+  		float4  g_vToonColor < UiType(Texture); Default4(0.5, 0.5, 0.5, 1.0); UiGroup("Toon_Shading,10/1"); >; TextureAttribute(g_vToonColor, g_vToonColor); 												// RGB is used for base color, A is used for opacity/translucency.
+		float4  g_vToonOutlineColor < UiType(Texture); Default4(0.0, 0.0, 0.0, 0.0); UiGroup("Toon_Shading,10/2"); >; TextureAttribute(g_vToonOutlineColor, g_vToonOutlineColor); 							// RGB is used for outline color, A is used for whether or not the ToonColor (After shading is applied) or the ToonOutline color will appear.
+  		float3  g_vNormal < UiType(Texture); Default3(0.0, 0.0, 0.0); UiGroup("Toon_Shading,10/3"); >; TextureAttribute(g_vNormal, g_vNormal);			           											// The normal map will be used for influencing the shading and specularity
+		// Shading Parameters
+  		float   g_vToonShadingRoughness < UiType(Texture); Default(0.0); UiGroup("Toon_Shading,10/4"); >; TextureAttribute(g_vToonShadingRoughness, g_vToonShadingRoughness);      							// 0.0f is fully rough shading, 1.0f is soft shading
+		int		g_vToonShadingSteps < UiType(Slider); Default(1); Range(1, 4); UiGroup("Toon_Shading,10/5"); >; IntAttribute(g_vToonShadingSteps, g_vToonShadingSteps);          							// 1 is the default amount of steps (lit or shaded), but this can go up to four steps.
+  		float	g_vToonShadingOffset < UiType(Texture); Default(0.5); UiGroup("Toon_Shading,10/6"); >; TextureAttribute(g_vToonShadingOffset, g_vToonShadingOffset); 	       								// Controls how much of the material is shaded. 0.5 is the default, being half the material.
+		float	g_vEdgeShading < UiType(Texture); Default(0.0); UiGroup("Toon_Shading,10/7"); >; TextureAttribute(g_vEdgeShading, g_vEdgeShading);	       													// Allows certain portions of the material to be shaded on the edges based on the camera direction. By default, this is set to 0.
+		float	g_vEdgeShadingOffset < UiType(Texture); Default(0.125); UiGroup("Toon_Shading,10/8"); >; TextureAttribute(g_vEdgeShadingOffset, g_vEdgeShadingOffset);	       								// Controls how much of the material has edge shading. By default, this is set to 0.125, being 1/8th of the material radius.
+		float3  g_vShadingColor < UiType(Texture); Default3(0.5, 0.5, 0.5); UiGroup("Toon_Shading,10/9"); >; TextureAttribute(g_vShadingColor, g_vShadingColor);		       								// Controls the shading color (ToonColor * Shading Color).
+		float 	g_vDynamicShadowRoughness < UiType(Slider); Default(1.0); Range(0.0, 1.0); UiGroup("Toon_Shading,10/10"); >; FloatAttribute(g_vDynamicShadowRoughness, g_vDynamicShadowRoughness);   		// Controls how rough dynamic shadows are on the material. By default, this is set to 1.0 to preserve the original look of dynamic shadows.
+		// Specular Parameters
+		float	g_vSpecular < UiType(Texture); Default(1.0); UiGroup("Toon_Shading,10/11"); >; TextureAttribute(g_vSpecular, g_vSpecular);																	// Controls the specularity of the material.
+		float	g_vSpecularRoughness < UiType(Texture); Default(0.0); UiGroup("Toon_Shading,10/12"); >; TextureAttribute(g_vSpecularRoughness, g_vSpecularRoughness);										// Controls the roughness of the specularity. 0.0f is fully rough specularity, 1.0f is soft specularity.
+		int		g_vSpecularSteps < UiType(Slider); Default(1); Range(1, 3); UiGroup("Toon_Shading,10/13"); >; IntAttribute(g_vSpecularSteps, g_vSpecularSteps);	   										// 1 is the default amount of steps (highlighted or lit), but this can go up to three steps.
+		// Fresnel Parameters
+		float	g_vFresnelIntensity < UiType(Texture); Default(1.0); UiGroup("Toon_Shading,10/14"); >; TextureAttribute(g_vFresnelIntensity, g_vFresnelIntensity);	   										// Controls how much fresnel the material has.
+		float3  g_vFresnelColor < UiType(Texture); Default3(1.0, 1.0, 1.0); UiGroup("Toon_Shading,10/15"); >; TextureAttribute(g_vFresnelColor, g_vFresnelColor);											// Controls the fresnel color.
+		//`bool 	g_vFresnelEdgeLighting < UiType(CheckBox); Default(false); UiGroup("Toon_Shading,10/16"); >; BoolAtttribute(g_vFresnelEdgeLighting, g_vFresnelEdgeLighting);			   						// Toggles whether Fresnel Rim Lighting is enabled or not. Disabled by default.
+		float 	g_vFresnelRoughness < UiType(Texture); Default(1.0); UiGroup("Toon_Shading,10/17"); >; TextureAttribute(g_vFresnelRoughness, g_vFresnelRoughness);		   									// 0.0f is fully rough fresnel, 1.0f is soft fresnel.
+	};
+}
+
+//=========================================================================================================================
+
+struct VertexInput
+{
+	#include "common/vertexinput.hlsl"
+};
+
+//=========================================================================================================================
+
+struct PixelInput
+{
+	#include "common/pixelinput.hlsl"
+};
+
+//=========================================================================================================================
+
+VS
+{
+	#include "common/vertex.hlsl"
+	//
+	// Main
+	//
+	PixelInput MainVs( INSTANCED_SHADER_PARAMS( VS_INPUT i ) )
+	{
+		PixelInput o = ProcessVertex( i );
+		// Add your vertex manipulation functions here
+		return FinalizeVertex( o );
+	}
+}
+
+//=========================================================================================================================
+
+PS
+{
+	#include "common/pixel.hlsl"
+	#include "common.fxc"
+	#include "sun_shadowing.fxc"
+
+	float3 lightVector(PixelInput pInput)
+	{
+		float3 toonLV = g_vSunLightColor * saturate(dot(g_vSunLightDir, pInput.vNormalWs));
+		return toonLV;
+	}
+
+	float3 specularVector(PixelInput pInput, float smoothness)
+	{
+		float toonSpecSmoothness = exp2((smoothness * 10) + 1);
+		float3 toonSpec = pow(saturate(dot(normalize(lightVector(pInput) + g_vCameraDirWs), pInput.vNormalWs)), toonSpecSmoothness);
+		return toonSpec;
+	}
+
+	float3 shadingResult(PixelInput pInput, float smoothness)
+	{
+		float3 toonShade = ceil(lightVector(pInput)) + ceil(specularVector(pInput, smoothness));
+		return toonShade;
+	}
+
+	//
+	// Main
+	//
+	PixelOutput MainPs( PixelInput i )
+	{
+		PixelOutput o; // Creates a basic Pixel Output.
+
+		ToonShadedMaterial ToonMat; // We need to initialize our ToonShadedMaterial Struct, so we can reference it.
+
+		ToonMat.g_vToonColor = float4(0.25, 0.25, 0.25, 1.0); // As a test, set our Toon Color to a grayish tone.
+
+		//o.vColor.rgb = ToonMat.g_vToonColor; // Set our output Color as our Toon Color for now.
+
+		o.vColor.rgb = (g_vSunLightColor + ToonMat.g_vToonColor) + shadingResult(i, 1.0); // Sets the output as the base color (with lighting) mixed with toon shaded light/specular vectors.
+		o.vColor.a = ToonMat.g_vToonColor.w; // I assume this will make the output alpha be the alpha of the ToonColor texture, which is the fourth value in the Float4.
+
+		return o;
+	}
+}
