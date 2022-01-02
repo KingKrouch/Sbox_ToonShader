@@ -117,6 +117,14 @@ PS
 		return toonSpec;
 	}
 
+	float3 fresnelVector(PixelInput pInput)
+	{
+		float fresnelSize = 2; // 2 is the least that I'd suggest, 1 just causes the entire rendering to break. 10 is probably the most that you are going to see it.
+		float fresnelSpecular = saturate(pow((dot(g_vCameraDirWs, pInput.vNormalWs) * fresnelSize), 2));
+		float fresnelSpec = lerp(1.0, 0.0, fresnelSpecular); // Ceil this if you want hard fresnel shading.
+		return fresnelSpec;
+	}
+
 	PixelOutput MainPs( PixelInput i )
 	{
 		PixelOutput o; // Creates a basic Pixel Output.
@@ -132,11 +140,9 @@ PS
 
 
 		float3 toonShade = ceil(shadingVector(i));
-		float3 toonSpecular = ceil(specularVector(i, ToonMat.g_vSpecularOffset));
+		float3 toonSpecular = ceil(specularVector(i, ToonMat.g_vSpecularOffset)) + fresnelVector(i);
 		float3 shadingResult = g_vSunLightColor * lerp(m.Albedo * ToonMat.g_vShadingColor, m.Albedo, toonShade);
 		float3 shadingResultAfterSpecular = shadingResult + ((toonSpecular * ToonMat.g_vSpecularColor) * ToonMat.g_vSpecularIntensity);
-
-		//m.Normal
 
 		o.vColor.rgb = shadingResultAfterSpecular;
 		o.vColor.a = m.Opacity; // Makes the output alpha the opacity map attached to the material.
