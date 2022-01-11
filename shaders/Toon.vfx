@@ -57,6 +57,7 @@ COMMON
 		float3  g_vFresnelColor < UiType(Texture); Default3(1.0, 1.0, 1.0); UiGroup("Toon_Shading,10/18"); >; TextureAttribute(g_vFresnelColor, g_vFresnelColor);											// Controls the fresnel color.
 		//bool 	g_vFresnelEdgeLighting < UiType(CheckBox); Default(false); UiGroup("Toon_Shading,10/19"); >; BoolAtttribute(g_vFresnelEdgeLighting, g_vFresnelEdgeLighting);			   					// Toggles whether Fresnel Rim Lighting is enabled or not. Disabled by default.
 		float 	g_vFresnelRoughness < UiType(Texture); Default(1.0); UiGroup("Toon_Shading,10/20"); >; TextureAttribute(g_vFresnelRoughness, g_vFresnelRoughness);		   									// 0.0f is fully rough fresnel, 1.0f is soft fresnel.
+		float 	g_vFresnelOffset < UiType(Texture); Default(0.0); UiGroup("Toon_Shading,10/21"); >; TextureAttribute(g_vFresnelOffset, g_vFresnelOffset);
 	};
 }
 
@@ -110,12 +111,12 @@ PS
 		return toonShade;
 	}
 
-	float3 specularVector(PixelInput pInput, float offset)
-	{
-		float toonSpecOffset = exp2((offset * 10) + 1);
-		float3 toonSpec = pow(saturate(dot(normalize(saturate(lightVector(pInput)) + g_vCameraDirWs), pInput.vNormalWs)), toonSpecOffset);
-		return toonSpec;
-	}
+	//float3 specularVector(PixelInput pInput, float offset)
+	//{
+		//float toonSpecOffset = exp2((offset * 10) + 1);
+		//float3 toonSpec = pow(saturate(dot(normalize(saturate(lightVector(pInput)) + g_vCameraDirWs), pInput.vNormalWs)), toonSpecOffset);
+		//return toonSpec;
+	//}
 
 	float3 fresnelVector(PixelInput pInput)
 	{
@@ -135,16 +136,24 @@ PS
 		// Set up some parameters that we are going to be using, since the struct variable declaration seemingly isn't fucking working right for some reason.
 		ToonMat.g_vShadingColor = float3(0.5, 0.5, 0.5);
 		ToonMat.g_vSpecularColor = float3(1.0, 1.0, 1.0);
-		ToonMat.g_vSpecularIntensity = 0.25;
+		ToonMat.g_vSpecularIntensity = 0.5;
 		ToonMat.g_vSpecularOffset = 1.0;
+		ToonMat.g_vToonShadingSteps = 1.0;
 
+		ToonMat.g_vToonShadingRoughness = 0.25;
+		ToonMat.g_vToonShadingOffset = 0.00;
 
-		float3 toonShade = ceil(shadingVector(i));
-		float3 toonSpecular = ceil(specularVector(i, ToonMat.g_vSpecularOffset)) + fresnelVector(i);
-		float3 shadingResult = g_vSunLightColor * lerp(m.Albedo * ToonMat.g_vShadingColor, m.Albedo, toonShade);
-		float3 shadingResultAfterSpecular = shadingResult + ((toonSpecular * ToonMat.g_vSpecularColor) * ToonMat.g_vSpecularIntensity);
+		ToonMat.g_vFresnelRoughness = 0.75;
+		ToonMat.g_vFresnelOffset = 0.25;
 
-		o.vColor.rgb = shadingResultAfterSpecular;
+		float3 toonShade = smoothstep(ToonMat.g_vToonShadingOffset,ToonMat.g_vToonShadingRoughness,(shadingVector(i) / ToonMat.g_vToonShadingSteps));
+		float3 toonSpecular = smoothstep(ToonMat.g_vFresnelOffset, ToonMat.g_vFresnelRoughness, fresnelVector(i));
+
+		float3 shadingResult = g_vSunLightColor * lerp(m.Albedo * ToonMat.g_vShadingColor, m.Albedo, toonShade); // Do our color and shading results first.
+		float3 specularResult = lerp(0.00, ((toonSpecular * ToonMat.g_vSpecularColor) * ToonMat.g_vSpecularIntensity), toonShade); // Then do the specularity calculation next, making sure to keep the shading in mind.
+		float3 finalResult = shadingResult + specularResult; // Add these two results together for our final result.
+
+		o.vColor.rgb = finalResult;
 		o.vColor.a = m.Opacity; // Makes the output alpha the opacity map attached to the material.
 		
 		return o;
