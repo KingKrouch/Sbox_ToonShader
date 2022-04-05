@@ -1,0 +1,14 @@
+{
+  "Title": "S\u0026box Toon Shader",
+  "Type": "content",
+  "Org": "local",
+  "Ident": "sbox_toon_shader",
+  "Schema": 1,
+  "HasAssets": true,
+  "AssetsPath": "",
+  "ResourcePaths": null,
+  "HasCode": false,
+  "CodePath": null,
+  "RootNamespace": null,
+  "Metadata": {}
+}
