@@ -5,6 +5,7 @@ HEADER
 {
 	CompileTargets = ( IS_SM_50 && ( PC || VULKAN ) );
 	Description = "Toon Shader";
+	DevShader = true;
 	Version = 1;
 }
 
@@ -26,6 +27,8 @@ MODES
 FEATURES
 {
     #include "common/features.hlsl"
+
+	Feature(F_FRESNEL_EDGE_LIGHTING, 0..1, "Toon Shading");
 }
 
 //=========================================================================================================================

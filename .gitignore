@@ -1,0 +1,7 @@
+# Directories
+shaders/vfx/
+materials/default/
+# File Extensions
+*.vmat_c
+*.vtex_c
+*.vcs
